@@ -309,15 +309,16 @@ def set_features_classifiers_sets():
     spatial_features = dict()
     spatial_features['use'] = [False, True]
     #spatial_features['size'] = [(16, 16), (32, 32), (64, 64)]
-    spatial_features['size'] = [(16, 16), (32, 32)]
+    spatial_features['size'] = [(16, 16)]
 
     hist_features = dict()
     hist_features['use'] = (False, True)
     #hist_features['bin_num'] = (16, 32, 64)
-    hist_features['bin_num'] = [16, 32]
+    hist_features['bin_num'] = [16]
     hog_features = dict()
     hog_features['use'] = (False, True)
-    hog_features['orient'] = [8, 9]
+    hog_features['orient'] = [9]
+    #hog_features['orient'] = [8, 9]
     hog_features['pix_per_cell'] = [8]
     hog_features['cell_per_block'] = [2]
     hog_features['hog_channel'] = [0, 1, 2, 'ALL']
@@ -350,25 +351,25 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
     hist_bins_set = hist_features['bin_num']
 
     hog_use_set = hog_features['use']
-    hog_orient_set = hog_features['orient'] = (8, 9)
+    hog_orient_set = hog_features['orient']
     hog_pix_per_cell_set = hog_features['pix_per_cell']
     hog_cell_per_block_set = hog_features['cell_per_block']
     hog_channel_set = hog_features['hog_channel']
 
-    # for recording each combination
-    color_space_series = []
-    spatial_feat_series = []
-    spatial_size_series = []
-    hist_feat_series = []
-    hist_bins_series = []
-    hog_feat_series = []
-    orient_series = []
-    pix_per_cell_series = []
-    cell_per_block_series = []
-    hog_channel_series = []
-    clf_series = []
-    train_time_series = []
-    accuracy_series = []
+    # create a empty data frame
+    df = pd.DataFrame(columns=['color_space',
+                               'spatial_feat',
+                               'spatial_size',
+                               'hist_feat',
+                               'hist_bins',
+                               'hog_feat',
+                               'orient',
+                               'pix_per_cell',
+                               'cell_per_block',
+                               'hog_channel',
+                               'clf_name',
+                               'train_time',
+                               'accuracy'])
 
     for color_space in color_spaces:
         for spatial_feat in use_spaital:
@@ -382,6 +383,7 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
                                         for hog_channel in hog_channel_set:
                                             # at least extract one feature
                                             if spatial_feat or hist_feat or hog_feat:
+                                                # extract features and train the model based on above conditions
                                                 car_features = extract_features(cars, color_space=color_space,
                                                                                 spatial_size=spatial_size,
                                                                                 hist_bins=hist_bins,
@@ -390,7 +392,8 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
                                                                                 cell_per_block=cell_per_block,
                                                                                 hog_channel=hog_channel,
                                                                                 spatial_feat=spatial_feat,
-                                                                                hist_feat=hist_feat, hog_feat=hog_feat)
+                                                                                hist_feat=hist_feat,
+                                                                                hog_feat=hog_feat)
                                                 notcar_features = extract_features(notcars, color_space=color_space,
                                                                                    spatial_size=spatial_size,
                                                                                    hist_bins=hist_bins,
@@ -421,46 +424,54 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
 
                                                 # use different classifier to train
                                                 for clf_name in classifiers:
-                                                    t = time.time()
-                                                    clf = classifiers[clf_name]
-                                                    clf.fit(X_train, y_train)
-                                                    t2 = time.time()
-                                                    # training time
-                                                    train_time = round(t2 - t, 3)
-                                                    # test accuaracy
-                                                    accuracy = round(clf.score(X_test, y_test), 4)
-                                                    print("accuracy = %3.4f, training time = %3.3f " % (accuracy, train_time))
+                                                    try:
+                                                        t = time.time()
+                                                        clf = classifiers[clf_name]
+                                                        clf.fit(X_train, y_train)
+                                                        t2 = time.time()
+                                                        # training time
+                                                        train_time = round(t2 - t, 3)
+                                                        # test accuaracy
+                                                        accuracy = round(clf.score(X_test, y_test), 4)
+                                                        print(color_space, "spitial:", spatial_feat, spatial_size,
+                                                              "hist:", hist_feat, hist_bins, "hog:", hog_feat, orient,
+                                                              pix_per_cell, cell_per_block, hog_channel, clf_name,
+                                                              "accuracy = %3.4f, training time = %3.3f " % (
+                                                                  accuracy, train_time))
 
-                                                    # record each combination
-                                                    color_space_series.append(color_space)
-                                                    spatial_feat_series.append(spatial_feat)
-                                                    spatial_size_series.append(spatial_size)
-                                                    hist_feat_series.append(hist_feat)
-                                                    hist_bins_series.append(hist_bins)
-                                                    hog_feat_series.append(hog_feat)
-                                                    orient_series.append(orient)
-                                                    pix_per_cell_series.append(pix_per_cell)
-                                                    cell_per_block_series.append(cell_per_block)
-                                                    hog_channel_series.append(hog_channel)
-                                                    clf_series.append(clf_name)
-                                                    train_time_series.append(train_time)
-                                                    accuracy_series.append(accuracy)
-    # create a data frame and save it into csv file
-    df = pd.DataFrame({'color_space': color_space_series,
-                        'spatial_feat': spatial_feat_series,
-                        'spatial_size': spatial_size_series,
-                        'hist_feat': hist_feat_series,
-                        'hist_bins': hist_bins_series,
-                        'hog_feat': hog_feat_series,
-                        'orient': orient_series,
-                        'pix_per_cell': pix_per_cell_series,
-                        'cell_per_block': cell_per_block_series,
-                        'hog_channel': hog_channel_series,
-                        'classifier': clf_series,
-                        'train_time': train_time_series,
-                        'accuracy': accuracy_series})
-    print(df)
-    df.to_csv('feature_selection.csv')
+                                                        # create a series to record current training information
+                                                        new_series = pd.Series(
+                                                            [color_space, spatial_feat, spatial_size, hist_feat,
+                                                             hist_bins,
+                                                             hog_feat, orient, pix_per_cell, cell_per_block,
+                                                             hog_channel,
+                                                             clf_name, train_time, accuracy], index=['color_space',
+                                                                                                     'spatial_feat',
+                                                                                                     'spatial_size',
+                                                                                                     'hist_feat',
+                                                                                                     'hist_bins',
+                                                                                                     'hog_feat',
+                                                                                                     'orient',
+                                                                                                     'pix_per_cell',
+                                                                                                     'cell_per_block',
+                                                                                                     'hog_channel',
+                                                                                                     'clf_name',
+                                                                                                     'train_time',
+                                                                                                     'accuracy'])
+                                                        # append the series to the data frame
+                                                        df = df.append(new_series, ignore_index=True)
+                                                    except Exception as e:
+                                                        # if exception happened in the training process, move to next training
+                                                        doc = open('error.txt', mode='a')
+
+                                                        print(color_space, "spitial:", spatial_feat, spatial_size,
+                                                              "hist:", hist_feat, hist_bins, "hog:", hog_feat, orient,
+                                                              pix_per_cell, cell_per_block, hog_channel, clf_name, '----Error:', e, file=doc)
+                                                        doc.close()
+                                                        continue
+                                                df.to_csv('feature_selection.csv')
+
+
 
 
 
@@ -478,10 +489,11 @@ if __name__ == "__main__":
         else:
             cars.append(image)
 
+    import random
     #decide the sample size
-    # sample_size = 500
-    # cars = cars[0:sample_size]
-    # notcars = notcars[0:sample_size]
+    sample_size = 3000
+    cars = random.sample(cars, sample_size)
+    notcars = random.sample(notcars, sample_size)
 
     test = True
     if test is True:
