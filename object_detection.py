@@ -130,7 +130,8 @@ def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
     for file in imgs:
         file_features = []
         # Read in each one by one
-        image = mpimg.imread(file)
+        image = cv2.imread(file)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         # apply color conversion if other than 'RGB'
         if color_space != 'RGB':
             if color_space == 'HSV':
@@ -416,8 +417,9 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
 
                                                 # filter bad value in X
                                                 nans_index = np.where(np.isnan(X))
-                                                X = np.delete(X, nans_index)
-                                                y = np.delete(y, nans_index)
+                                                row_index = list(set(nans_index[0]))
+                                                X = np.delete(X, row_index, axis=0)
+                                                y = np.delete(y, row_index, axis=0)
 
                                                 # Split up data into randomized training and test sets
                                                 rand_state = np.random.randint(0, 100)
@@ -527,14 +529,15 @@ if __name__ == "__main__":
     hog_feat = True  # HOG features on or off
     y_start_stop = [None, None]  # Min and max in y to search in slide_window()
 
+    # save config_dataset
     folder_name = 'data_set/'
-    path_name = folder_name + str(color_space) + '_spatial-' + str(spatial_feat) + str(spatial_size) + '_hist-' + str(
+    dataset_path = folder_name + str(color_space) + '_spatial-' + str(spatial_feat) + str(spatial_size) + '_hist-' + str(
         hist_feat) + str(hist_bins) + '_hog-' + str(hog_feat) + str(orient) + str(pix_per_cell) + \
                 str(cell_per_block) + str(hog_channel) + '.p'
 
     # get the dataset from pickle
-    if os.path.isfile(path_name):
-        save_dict = pickle.load(open(path_name, "rb"))
+    if os.path.isfile(dataset_path):
+        save_dict = pickle.load(open(dataset_path, "rb"))
         X = save_dict['input_data']
         y = save_dict['label']
     # if the dataset doesn't exist, create the dataset and store it to a pickle
@@ -560,14 +563,13 @@ if __name__ == "__main__":
 
         # filter bad value in X
         nans_index = np.where(np.isnan(X))
-        X = np.delete(X, nans_index)
-        y = np.delete(y, nans_index)
-
+        row_index = list(set(nans_index[0]))
+        X = np.delete(X, row_index, axis=0)
+        y = np.delete(y, row_index, axis=0)
 
         # store the dataset into the .p
-
         save_dict = {'input_data': X, 'label': y}
-        with open(path_name, 'wb') as f:
+        with open(dataset_path, 'wb') as f:
             pickle.dump(save_dict, f)
 
     # Split up data into randomized training and test sets
@@ -581,24 +583,43 @@ if __name__ == "__main__":
     X_train = X_scaler.transform(X_train)
     X_test = X_scaler.transform(X_test)
 
-    print('Using:', orient, 'orientations', pix_per_cell,
-          'pixels per cell and', cell_per_block, 'cells per block')
-    print('Feature vector length:', len(X_train[0]))
-    # Use a linear SVC
-    #clf = GaussianNB()
-    clf = SVC(C=1.0, kernel='linear')
-    # Check the training time for the SVC
-    t = time.time()
-    clf.fit(X_train, y_train)
-    t2 = time.time()
-    print(round(t2 - t, 2), 'Seconds to train Classifier...')
-    # Check the score of the SVC
-    print('Test Accuracy of Classifier = ', round(clf.score(X_test, y_test), 4))
-    # Check the prediction time for a single sample
-    t = time.time()
 
-    image = mpimg.imread('bbox-example-image.jpg')
-    draw_image = np.copy(image)
+    # save the modes
+    clf_name = 'svc-1-linear'
+    folder_name = 'models/'
+    model_path = folder_name + clf_name + str(color_space) + '_spatial-' + str(spatial_feat) + str(spatial_size) + '_hist-' + str(
+        hist_feat) + str(hist_bins) + '_hog-' + str(hog_feat) + str(orient) + str(pix_per_cell) + \
+                str(cell_per_block) + str(hog_channel) + '.p'
+    if os.path.isfile(model_path):
+        save_dict = pickle.load(open(model_path, "rb"))
+        clf = save_dict['classifier']
+        train_time = save_dict['train_time']
+        accuracy = save_dict['accuracy']
+        # if the dataset doesn't exist, create the dataset and store it to a pickle
+    else:
+        print('Using:', orient, 'orientations', pix_per_cell,
+              'pixels per cell and', cell_per_block, 'cells per block')
+        print('Feature vector length:', len(X_train[0]))
+        # Use a linear SVC
+        # clf = GaussianNB()
+        clf = SVC(C=1.0, kernel='linear')
+        # Check the training time for the SVC
+        t = time.time()
+        clf.fit(X_train, y_train)
+        t2 = time.time()
+        train_time = round(t2 - t, 2)
+        accuracy = round(clf.score(X_test, y_test), 4)
+        print(train_time, 'Seconds to train Classifier...')
+        # Check the score of the SVC
+        print('Test Accuracy of Classifier = ', accuracy)
+        # Check the prediction time for a single sample
+        t = time.time()
+        save_dict = {'classifier': clf, 'accuracy': accuracy, 'train_time': train_time}
+        with open(model_path, 'wb') as f:
+            pickle.dump(save_dict, f)
+
+    image = cv2.imread('test_images/test1.jpg')
+    draw_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     # Uncomment the following line if you extracted training
     # data from .png images (scaled 0 to 1 by mpimg) and the
@@ -619,6 +640,7 @@ if __name__ == "__main__":
 
     plt.imshow(window_img)
     plt.show()
+    a = 1
 
 
 
