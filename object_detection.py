@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import cv2
 import glob
+import os
+import pickle
 import time
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
@@ -304,7 +306,8 @@ def search_windows(img, windows, clf, scaler, color_space='RGB',
 
 def set_features_classifiers_sets():
 
-    color_spaces = ['RGB', 'HLS', 'LUV', 'HSV', 'YCrCb']
+    #color_spaces = ['RGB', 'HLS', 'LUV', 'HSV', 'YCrCb']
+    color_spaces = ['LUV', 'HSV', 'YCrCb']
 
     spatial_features = dict()
     spatial_features['use'] = [False, True]
@@ -411,12 +414,18 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
                                                 y = np.hstack(
                                                     (np.ones(len(car_features)), np.zeros(len(notcar_features))))
 
+                                                # filter bad value in X
+                                                nans_index = np.where(np.isnan(X))
+                                                X = np.delete(X, nans_index)
+                                                y = np.delete(y, nans_index)
+
                                                 # Split up data into randomized training and test sets
                                                 rand_state = np.random.randint(0, 100)
                                                 X_train, X_test, y_train, y_test = train_test_split(
                                                     X, y, test_size=0.2, random_state=rand_state)
 
-                                                # Fit a per-column scaler
+                                                # there should be no NAN in training set
+
                                                 X_scaler = StandardScaler().fit(X_train)
                                                 # Apply the scaler to X
                                                 X_train = X_scaler.transform(X_train)
@@ -477,6 +486,7 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
 
 if __name__ == "__main__":
 
+
     # Read in cars and notcars
     images = glob.glob('mix_data/*.png')
     cars = []
@@ -490,49 +500,75 @@ if __name__ == "__main__":
             cars.append(image)
 
     import random
-    #decide the sample size
-    sample_size = 3000
+
+    # decide the sample size
+    """
+    sample_size = 4000
     cars = random.sample(cars, sample_size)
     notcars = random.sample(notcars, sample_size)
+    """
 
-    test = True
+    test = False
     if test is True:
         classifiers, color_spaces, spatial_features, hist_features, hog_features = set_features_classifiers_sets()
         search_best_combination(cars, notcars, classifiers, color_spaces, spatial_features, hist_features, hog_features)
 
 
-    """
     ### TODO: Tweak these parameters and see how the results change.
-    color_space = 'RGB'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
-    orient = 9  # HOG orientations
+    color_space = 'YUV'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
+    orient = 11  # HOG orientations
     pix_per_cell = 8  # HOG pixels per cell
     cell_per_block = 2  # HOG cells per block
-    hog_channel = 0  # Can be 0, 1, 2, or "ALL"
+    hog_channel = "ALL"  # Can be 0, 1, 2, or "ALL"
     spatial_size = (16, 16)  # Spatial binning dimensions
     hist_bins = 16  # Number of histogram bins
-    spatial_feat = True  # Spatial features on or off
-    hist_feat = True  # Histogram features on or off
+    spatial_feat = False  # Spatial features on or off
+    hist_feat = False  # Histogram features on or off
     hog_feat = True  # HOG features on or off
     y_start_stop = [None, None]  # Min and max in y to search in slide_window()
 
-    car_features = extract_features(cars, color_space=color_space,
-                                    spatial_size=spatial_size, hist_bins=hist_bins,
-                                    orient=orient, pix_per_cell=pix_per_cell,
-                                    cell_per_block=cell_per_block,
-                                    hog_channel=hog_channel, spatial_feat=spatial_feat,
-                                    hist_feat=hist_feat, hog_feat=hog_feat)
-    notcar_features = extract_features(notcars, color_space=color_space,
-                                       spatial_size=spatial_size, hist_bins=hist_bins,
-                                       orient=orient, pix_per_cell=pix_per_cell,
-                                       cell_per_block=cell_per_block,
-                                       hog_channel=hog_channel, spatial_feat=spatial_feat,
-                                       hist_feat=hist_feat, hog_feat=hog_feat)
+    folder_name = 'data_set/'
+    path_name = folder_name + str(color_space) + '_spatial-' + str(spatial_feat) + str(spatial_size) + '_hist-' + str(
+        hist_feat) + str(hist_bins) + '_hog-' + str(hog_feat) + str(orient) + str(pix_per_cell) + \
+                str(cell_per_block) + str(hog_channel) + '.p'
 
-    # Create an array stack of feature vectors
-    X = np.vstack((car_features, notcar_features)).astype(np.float64)
+    # get the dataset from pickle
+    if os.path.isfile(path_name):
+        save_dict = pickle.load(open(path_name, "rb"))
+        X = save_dict['input_data']
+        y = save_dict['label']
+    # if the dataset doesn't exist, create the dataset and store it to a pickle
+    else:
 
-    # Define the labels vector
-    y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
+        car_features = extract_features(cars, color_space=color_space,
+                                        spatial_size=spatial_size, hist_bins=hist_bins,
+                                        orient=orient, pix_per_cell=pix_per_cell,
+                                        cell_per_block=cell_per_block,
+                                        hog_channel=hog_channel, spatial_feat=spatial_feat,
+                                        hist_feat=hist_feat, hog_feat=hog_feat)
+        notcar_features = extract_features(notcars, color_space=color_space,
+                                           spatial_size=spatial_size, hist_bins=hist_bins,
+                                           orient=orient, pix_per_cell=pix_per_cell,
+                                           cell_per_block=cell_per_block,
+                                           hog_channel=hog_channel, spatial_feat=spatial_feat,
+                                           hist_feat=hist_feat, hog_feat=hog_feat)
+
+        # Create an array stack of feature vectors
+        X = np.vstack((car_features, notcar_features)).astype(np.float64)
+        # Define the labels vector
+        y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
+
+        # filter bad value in X
+        nans_index = np.where(np.isnan(X))
+        X = np.delete(X, nans_index)
+        y = np.delete(y, nans_index)
+
+
+        # store the dataset into the .p
+
+        save_dict = {'input_data': X, 'label': y}
+        with open(path_name, 'wb') as f:
+            pickle.dump(save_dict, f)
 
     # Split up data into randomized training and test sets
     rand_state = np.random.randint(0, 100)
@@ -549,14 +585,15 @@ if __name__ == "__main__":
           'pixels per cell and', cell_per_block, 'cells per block')
     print('Feature vector length:', len(X_train[0]))
     # Use a linear SVC
-    svc = LinearSVC()
+    #clf = GaussianNB()
+    clf = SVC(C=1.0, kernel='linear')
     # Check the training time for the SVC
     t = time.time()
-    svc.fit(X_train, y_train)
+    clf.fit(X_train, y_train)
     t2 = time.time()
-    print(round(t2 - t, 2), 'Seconds to train SVC...')
+    print(round(t2 - t, 2), 'Seconds to train Classifier...')
     # Check the score of the SVC
-    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
+    print('Test Accuracy of Classifier = ', round(clf.score(X_test, y_test), 4))
     # Check the prediction time for a single sample
     t = time.time()
 
@@ -571,7 +608,7 @@ if __name__ == "__main__":
     windows = slide_window(image, x_start_stop=[None, None], y_start_stop=y_start_stop,
                            xy_window=(96, 96), xy_overlap=(0.5, 0.5))
 
-    hot_windows = search_windows(image, windows, svc, X_scaler, color_space=color_space,
+    hot_windows = search_windows(image, windows, clf, X_scaler, color_space=color_space,
                                  spatial_size=spatial_size, hist_bins=hist_bins,
                                  orient=orient, pix_per_cell=pix_per_cell,
                                  cell_per_block=cell_per_block,
@@ -582,7 +619,7 @@ if __name__ == "__main__":
 
     plt.imshow(window_img)
     plt.show()
-    """
+
 
 
 
