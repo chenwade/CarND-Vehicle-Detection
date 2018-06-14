@@ -26,6 +26,8 @@ import cv2
 from skimage.feature import hog
 
 
+from feature import *
+
 # Define a function to draw bounding boxes
 def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Make a copy of the image
@@ -72,105 +74,40 @@ def draw_labeled_bboxes(img, labels):
     return img
 
 
-# Define a function to return HOG features and visualization
-def get_hog_features(img, orient, pix_per_cell, cell_per_block,
-                     vis=False, feature_vec=True):
-    # Call with two outputs if vis==True
-    if vis == True:
-        features, hog_image = hog(img, orientations=orient,
-                                  pixels_per_cell=(pix_per_cell, pix_per_cell),
-                                  block_norm='L2-Hys',
-                                  cells_per_block=(cell_per_block, cell_per_block),
-                                  transform_sqrt=True,
-                                  visualise=vis, feature_vector=feature_vec)
-        return features, hog_image
-    # Otherwise call with one output
-    else:
-        features = hog(img, orientations=orient,
-                       pixels_per_cell=(pix_per_cell, pix_per_cell),
-                       cells_per_block=(cell_per_block, cell_per_block),
-                       block_norm='L2-Hys',
-                       transform_sqrt=True,
-                       visualise=vis, feature_vector=feature_vec)
-        return features
+# Define a function to extract features from a list of feature managers
+def extract_features(imgs, feature_managers, cspace='RGB'):
+    # Create a list to append feature vectors
+    features_list = []
+    for feature_mgr in feature_managers:
+        features_list.append([])
 
-
-# Define a function to compute binned color features
-def bin_spatial(img, size=(32, 32)):
-    # Use cv2.resize().ravel() to create the feature vector
-    features = cv2.resize(img, size).ravel()
-    # Return the feature vector
-    return features
-
-
-# Define a function to compute color histogram features
-# NEED TO CHANGE bins_range if reading .png files with mpimg!
-def color_hist(img, nbins=32, bins_range=(0, 256)):
-    # Compute the histogram of the color channels separately
-    channel1_hist = np.histogram(img[:, :, 0], bins=nbins, range=bins_range)
-    channel2_hist = np.histogram(img[:, :, 1], bins=nbins, range=bins_range)
-    channel3_hist = np.histogram(img[:, :, 2], bins=nbins, range=bins_range)
-    # Concatenate the histograms into a single feature vector
-    hist_features = np.concatenate((channel1_hist[0], channel2_hist[0], channel3_hist[0]))
-    # Return the individual histograms, bin_centers and feature vector
-    return hist_features
-
-
-
-# Define a function to extract features from a list of images
-# Have this function call bin_spatial() and color_hist()
-def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
-                     hist_bins=32, orient=9,
-                     pix_per_cell=8, cell_per_block=2, hog_channel=0,
-                     spatial_feat=True, hist_feat=True, hog_feat=True):
-
-    # Create a list to append feature vectors to
-    features = []
     # Iterate through the list of images
     for file in imgs:
-        file_features = []
         # Read in each one by one
         image = cv2.imread(file)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        # apply color conversion if other than 'RGB'
-        if color_space != 'RGB':
-            if color_space == 'HSV':
-                feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-            elif color_space == 'LUV':
-                feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2LUV)
-            elif color_space == 'HLS':
-                feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
-            elif color_space == 'YUV':
-                feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
-            elif color_space == 'YCrCb':
-                feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
-        else:
-            feature_image = np.copy(image)
 
-        if spatial_feat == True:
-            spatial_features = bin_spatial(feature_image, size=spatial_size)
-            file_features.append(spatial_features)
-        if hist_feat == True:
-            # Apply color_hist()
-            hist_features = color_hist(feature_image, nbins=hist_bins)
-            file_features.append(hist_features)
-        if hog_feat == True:
-            # Call get_hog_features() with vis=False, feature_vec=True
-            if hog_channel == 'ALL':
-                hog_features = []
-                for channel in range(feature_image.shape[2]):
-                    hog_features.append(get_hog_features(feature_image[:, :, channel],
-                                                         orient, pix_per_cell, cell_per_block,
-                                                         vis=False, feature_vec=True))
-                hog_features = np.ravel(hog_features)
-            else:
-                hog_features = get_hog_features(feature_image[:, :, hog_channel], orient,
-                                                pix_per_cell, cell_per_block, vis=False, feature_vec=True)
-            # Append the new feature vector to the features list
-            file_features.append(hog_features)
-        features.append(np.concatenate(file_features))
+        # apply color conversion if other than 'RGB'
+        if cspace != 'RGB':
+            if cspace == 'HSV':
+                ctrans_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+            elif cspace == 'LUV':
+                ctrans_image = cv2.cvtColor(image, cv2.COLOR_RGB2LUV)
+            elif cspace == 'HLS':
+                ctrans_image = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
+            elif cspace == 'YUV':
+                ctrans_image = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
+            elif cspace == 'YCrCb':
+                ctrans_image = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
+        else:
+            ctrans_image = np.copy(image)
+
+        # extract image feature by using different methods
+        for index, feature_mgr in enumerate(feature_managers):
+            features_list[index].append(feature_mgr.extract_feature(ctrans_image))
+
     # Return list of feature vectors
-    return features
+    return features_list
 
 
 # Define a function that takes an image,
@@ -302,13 +239,10 @@ def search_windows(img, windows, clf, scaler, color_space='RGB',
     return on_windows
 
 
-
-
-
 def set_features_classifiers_sets():
 
-    #color_spaces = ['RGB', 'HLS', 'LUV', 'HSV', 'YCrCb']
-    color_spaces = ['LUV', 'HSV', 'YCrCb']
+    #color_spaces = ['RGB', 'HSV', 'HLS', 'LUV', 'YCrCb']
+    color_spaces = ['RGB', 'HSV', 'LUV']
 
     spatial_features = dict()
     spatial_features['use'] = [False, True]
@@ -323,7 +257,7 @@ def set_features_classifiers_sets():
     hog_features['use'] = (False, True)
     hog_features['orient'] = [9]
     #hog_features['orient'] = [8, 9]
-    hog_features['pix_per_cell'] = [8]
+    hog_features['pix_per_cell'] = [8, 16]
     hog_features['cell_per_block'] = [2]
     hog_features['hog_channel'] = [0, 1, 2, 'ALL']
 
@@ -387,209 +321,389 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
                                         for hog_channel in hog_channel_set:
                                             # at least extract one feature
                                             if spatial_feat or hist_feat or hog_feat:
-                                                # extract features and train the model based on above conditions
-                                                car_features = extract_features(cars, color_space=color_space,
-                                                                                spatial_size=spatial_size,
-                                                                                hist_bins=hist_bins,
-                                                                                orient=orient,
-                                                                                pix_per_cell=pix_per_cell,
-                                                                                cell_per_block=cell_per_block,
-                                                                                hog_channel=hog_channel,
-                                                                                spatial_feat=spatial_feat,
-                                                                                hist_feat=hist_feat,
-                                                                                hog_feat=hog_feat)
-                                                notcar_features = extract_features(notcars, color_space=color_space,
-                                                                                   spatial_size=spatial_size,
-                                                                                   hist_bins=hist_bins,
-                                                                                   orient=orient,
-                                                                                   pix_per_cell=pix_per_cell,
-                                                                                   cell_per_block=cell_per_block,
-                                                                                   hog_channel=hog_channel,
-                                                                                   spatial_feat=spatial_feat,
-                                                                                   hist_feat=hist_feat,
-                                                                                   hog_feat=hog_feat)
-                                                # Create an array stack of feature vectors
-                                                X = np.vstack((car_features, notcar_features)).astype(np.float64)
 
-                                                # Define the labels vector
-                                                y = np.hstack(
-                                                    (np.ones(len(car_features)), np.zeros(len(notcar_features))))
+                                                # init needed image feature manager
+                                                feature_mgrs = []
+                                                if spatial_feat is True:
+                                                    sp_mgr = SpatialFeature(spatial_size)
+                                                    feature_mgrs.append(sp_mgr)
+                                                if hist_feat is True:
+                                                    color_hist_mgr = ColorHistFeature(hist_bins)
+                                                    feature_mgrs.append(color_hist_mgr)
+                                                if hog_feat is True:
+                                                    hog_mgr = HogFeature(orient, pix_per_cell, cell_per_block,
+                                                                         hog_channel)
+                                                    feature_mgrs.append(hog_mgr)
 
-                                                # filter bad value in X
-                                                nans_index = np.where(np.isnan(X))
-                                                row_index = list(set(nans_index[0]))
-                                                X = np.delete(X, row_index, axis=0)
-                                                y = np.delete(y, row_index, axis=0)
+                                                """
+                                                       Extract the images features from image dataset and construct the feature dataset based on the feature 
+                                                       parameters setting. 
+                                                       Once we finished extracting the feature dataset, we save it to the 'features_set' folder 
+                                                       so that we don't need do it next time
+                                                       """
+                                                # define feature_dataset path
+                                                folder_name = 'features_set/'
+                                                suffix = str(color_space) + '_spatial-' + str(spatial_feat) + str(
+                                                    spatial_size) + '_hist-' + str(
+                                                    hist_feat) + str(hist_bins) + '_hog-' + str(hog_feat) + str(
+                                                    orient) + str(pix_per_cell) + \
+                                                         str(cell_per_block) + str(hog_channel) + '.p'
+                                                save_path = folder_name + suffix
 
-                                                # Split up data into randomized training and test sets
-                                                rand_state = np.random.randint(0, 100)
-                                                X_train, X_test, y_train, y_test = train_test_split(
-                                                    X, y, test_size=0.2, random_state=rand_state)
+                                                if os.path.isfile(save_path):
+                                                    # if feature dataset exist, load it from pickle
+                                                    save_dict = pickle.load(open(save_path, "rb"))
+                                                    car_features_list = save_dict['car_features_list']
+                                                    notcar_features_list = save_dict['notcar_features_list']
+                                                    feature_length = save_dict['feature_length']
+                                                    extract_time = save_dict['time']
+                                                else:
+                                                    # if the dataset doesn't exist, create the feature the dataset and store it to a pickle
+                                                    t1 = time.time()
+                                                    car_features_list = extract_features(cars, feature_mgrs,
+                                                                                         color_space)
+                                                    notcar_features_list = extract_features(notcars, feature_mgrs,
+                                                                                            color_space)
+                                                    t2 = time.time()
+                                                    extract_time = round(t2 - t1, 2)
 
-                                                # there should be no NAN in training set
+                                                    feature_length = 0
+                                                    for i in range(len(feature_mgrs)):
+                                                        feature_length += len(car_features_list[i][0])
 
-                                                X_scaler = StandardScaler().fit(X_train)
-                                                # Apply the scaler to X
-                                                X_train = X_scaler.transform(X_train)
-                                                X_test = X_scaler.transform(X_test)
+                                                    # store the dataset into the .p
+                                                    save_dict = {'car_features_list': car_features_list,
+                                                                 'notcar_features_list': notcar_features_list,
+                                                                 'feature_length': feature_length, 'time': extract_time}
+                                                    with open(save_path, 'wb') as f:
+                                                        pickle.dump(save_dict, f)
 
-                                                # use different classifier to train
+                                                print('Using:', orient, 'orientations', pix_per_cell,
+                                                      'pixels per cell and', cell_per_block, 'cells per block')
+                                                print("feature length: %d, feature extract time: %5.2f" % (
+                                                feature_length, extract_time))
+
+                                                train_data, test_data, train_labels, test_labels, feature_scalers = construct_train_test_dataset(
+                                                    car_features_list,
+                                                    notcar_features_list)
+
+                                                """
+                                                Define a model and train it.
+                                                Once we finished training the model, we save it to the 'models' folder 
+                                                    so that we don't need do it next time
+                                                
+                                                """
+                                                folder_name = 'models/'
                                                 for clf_name in classifiers:
-                                                    try:
-                                                        t = time.time()
-                                                        clf = classifiers[clf_name]
-                                                        clf.fit(X_train, y_train)
-                                                        t2 = time.time()
-                                                        # training time
-                                                        train_time = round(t2 - t, 3)
-                                                        # test accuaracy
-                                                        accuracy = round(clf.score(X_test, y_test), 4)
-                                                        print(color_space, "spitial:", spatial_feat, spatial_size,
-                                                              "hist:", hist_feat, hist_bins, "hog:", hog_feat, orient,
-                                                              pix_per_cell, cell_per_block, hog_channel, clf_name,
-                                                              "accuracy = %3.4f, training time = %3.3f " % (
-                                                                  accuracy, train_time))
 
-                                                        # create a series to record current training information
-                                                        new_series = pd.Series(
-                                                            [color_space, spatial_feat, spatial_size, hist_feat,
-                                                             hist_bins,
-                                                             hog_feat, orient, pix_per_cell, cell_per_block,
-                                                             hog_channel,
-                                                             clf_name, train_time, accuracy], index=['color_space',
-                                                                                                     'spatial_feat',
-                                                                                                     'spatial_size',
-                                                                                                     'hist_feat',
-                                                                                                     'hist_bins',
-                                                                                                     'hog_feat',
-                                                                                                     'orient',
-                                                                                                     'pix_per_cell',
-                                                                                                     'cell_per_block',
-                                                                                                     'hog_channel',
-                                                                                                     'clf_name',
-                                                                                                     'train_time',
-                                                                                                     'accuracy'])
-                                                        # append the series to the data frame
-                                                        df = df.append(new_series, ignore_index=True)
-                                                    except Exception as e:
-                                                        # if exception happened in the training process, move to next training
-                                                        doc = open('error.txt', mode='a')
+                                                    model_path = folder_name + clf_name + suffix
+                                                    if os.path.isfile(model_path):
+                                                        save_dict = pickle.load(open(model_path, "rb"))
+                                                        clf = save_dict['classifier']
+                                                        train_time = save_dict['train_time']
+                                                        accuracy = save_dict['accuracy']
 
-                                                        print(color_space, "spitial:", spatial_feat, spatial_size,
-                                                              "hist:", hist_feat, hist_bins, "hog:", hog_feat, orient,
-                                                              pix_per_cell, cell_per_block, hog_channel, clf_name, '----Error:', e, file=doc)
-                                                        doc.close()
-                                                        continue
+                                                    else:
+                                                        try:
+                                                            # Use a classifier
+                                                            clf = classifiers[clf_name]
+                                                            # Check the training time for the SVC
+                                                            t = time.time()
+                                                            clf.fit(train_data, train_labels)
+                                                            t2 = time.time()
+                                                            train_time = round(t2 - t, 2)
+                                                            accuracy = round(clf.score(test_data, test_labels), 4)
+
+                                                            # save the model info
+                                                            save_dict = {'classifier': clf, 'accuracy': accuracy,
+                                                                         'train_time': train_time}
+                                                            with open(model_path, 'wb') as f:
+                                                                pickle.dump(save_dict, f)
+
+                                                            # create a series to record current training information
+
+                                                        except Exception as e:
+                                                            # if exception happened in the training process, move to next training
+                                                            doc = open('error.txt', mode='a')
+
+                                                            print(color_space, "spitial:", spatial_feat, spatial_size,
+                                                                  "hist:", hist_feat, hist_bins, "hog:", hog_feat,
+                                                                  orient,
+                                                                  pix_per_cell, cell_per_block, hog_channel, clf_name,
+                                                                  '----Error:', e, file=doc)
+                                                            doc.close()
+                                                            continue
+
+                                                    print(train_time, 'Seconds to train Classifier...')
+                                                    # Check the score of the Classifier
+                                                    print('Test Accuracy of Classifier = ', accuracy)
+
+                                                    new_series = pd.Series(
+                                                        [color_space, spatial_feat, spatial_size, hist_feat,
+                                                         hist_bins,
+                                                         hog_feat, orient, pix_per_cell, cell_per_block,
+                                                         hog_channel,
+                                                         clf_name, train_time, accuracy],
+                                                        index=['color_space',
+                                                               'spatial_feat',
+                                                               'spatial_size',
+                                                               'hist_feat',
+                                                               'hist_bins',
+                                                               'hog_feat',
+                                                               'orient',
+                                                               'pix_per_cell',
+                                                               'cell_per_block',
+                                                               'hog_channel',
+                                                               'clf_name',
+                                                               'train_time',
+                                                               'accuracy'])
+
+                                                    # append the series to the data frame
+                                                    df = df.append(new_series, ignore_index=True)
                                                 df.to_csv('feature_selection.csv')
 
 
 
+def set_feat_mgrs_scalers(feature_mgrs, feature_scalers):
+    for i in range(len(feature_mgrs)):
+        feature_mgrs[i].features_scaler = feature_scalers[i]
 
 
-if __name__ == "__main__":
+def find_cars1(img, clf, feature_mgrs, x_start_stop=[None, None], y_start_stop=[None, None], scale=1.0, cspace='RGB'):
+    """
+        Define a single function that can extract features using hog sub-sampling and make predictions
+        The code below maybe a little confusing, but it can help to only extract hog features once.
+        As result, this version of code cost less time finding cars
+    """
 
+    assert feature_mgrs
+    car_boxes = []
 
-    # Read in cars and notcars
-    images = glob.glob('mix_data/*.png')
-    cars = []
-    notcars = []
-    for image in images:
-        if 'left' in image or 'right' in image or 'mid' in image or 'far' in image:
-            cars.append(image)
-        elif 'image' in image or 'extra' in image:
-            notcars.append(image)
+    if x_start_stop == [None, None]:
+        x_start_stop = [0, image.shape[1]]
+    if y_start_stop == [None, None]:
+        y_start_stop = [0, image.shape[0]]
+
+    img_tosearch = img[y_start_stop[0]:y_start_stop[1], x_start_stop[0]:x_start_stop[1], :]
+
+    if cspace != 'RGB':
+        if cspace == 'HSV':
+            ctrans_tosearch = cv2.cvtColor(img_tosearch, cv2.COLOR_RGB2HSV)
+        elif cspace == 'LUV':
+            ctrans_tosearch = cv2.cvtColor(img_tosearch, cv2.COLOR_RGB2LUV)
+        elif cspace == 'HLS':
+            ctrans_tosearch = cv2.cvtColor(img_tosearch, cv2.COLOR_RGB2HLS)
+        elif cspace == 'YUV':
+            ctrans_tosearch = cv2.cvtColor(img_tosearch, cv2.COLOR_RGB2YUV)
+        elif cspace == 'YCrCb':
+            ctrans_tosearch = cv2.cvtColor(img_tosearch, cv2.COLOR_RGB2YCrCb)
         else:
-            cars.append(image)
-
-    import random
-
-    # decide the sample size
-    """
-    sample_size = 4000
-    cars = random.sample(cars, sample_size)
-    notcars = random.sample(notcars, sample_size)
-    """
-
-    test = False
-    if test is True:
-        classifiers, color_spaces, spatial_features, hist_features, hog_features = set_features_classifiers_sets()
-        search_best_combination(cars, notcars, classifiers, color_spaces, spatial_features, hist_features, hog_features)
-
-
-    ### TODO: Tweak these parameters and see how the results change.
-    color_space = 'YUV'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
-    orient = 11  # HOG orientations
-    pix_per_cell = 8  # HOG pixels per cell
-    cell_per_block = 2  # HOG cells per block
-    hog_channel = "ALL"  # Can be 0, 1, 2, or "ALL"
-    spatial_size = (16, 16)  # Spatial binning dimensions
-    hist_bins = 16  # Number of histogram bins
-    spatial_feat = False  # Spatial features on or off
-    hist_feat = False  # Histogram features on or off
-    hog_feat = True  # HOG features on or off
-    y_start_stop = [None, None]  # Min and max in y to search in slide_window()
-
-    # save config_dataset
-    folder_name = 'data_set/'
-    dataset_path = folder_name + str(color_space) + '_spatial-' + str(spatial_feat) + str(spatial_size) + '_hist-' + str(
-        hist_feat) + str(hist_bins) + '_hog-' + str(hog_feat) + str(orient) + str(pix_per_cell) + \
-                str(cell_per_block) + str(hog_channel) + '.p'
-
-    # get the dataset from pickle
-    if os.path.isfile(dataset_path):
-        save_dict = pickle.load(open(dataset_path, "rb"))
-        X = save_dict['input_data']
-        y = save_dict['label']
-    # if the dataset doesn't exist, create the dataset and store it to a pickle
+            raise Exception("color space is %s" % cspace)
     else:
+        ctrans_tosearch = np.copy(img_tosearch)
 
-        car_features = extract_features(cars, color_space=color_space,
-                                        spatial_size=spatial_size, hist_bins=hist_bins,
-                                        orient=orient, pix_per_cell=pix_per_cell,
-                                        cell_per_block=cell_per_block,
-                                        hog_channel=hog_channel, spatial_feat=spatial_feat,
-                                        hist_feat=hist_feat, hog_feat=hog_feat)
-        notcar_features = extract_features(notcars, color_space=color_space,
-                                           spatial_size=spatial_size, hist_bins=hist_bins,
-                                           orient=orient, pix_per_cell=pix_per_cell,
-                                           cell_per_block=cell_per_block,
-                                           hog_channel=hog_channel, spatial_feat=spatial_feat,
-                                           hist_feat=hist_feat, hog_feat=hog_feat)
 
-        # Create an array stack of feature vectors
-        X = np.vstack((car_features, notcar_features)).astype(np.float64)
+    if scale != 1:
+        imshape = ctrans_tosearch.shape
+        ctrans_tosearch = cv2.resize(ctrans_tosearch, (np.int(imshape[1] / scale), np.int(imshape[0] / scale)))
+
+
+    # Define window and steps as below
+    # 64 was the orginal sampling rate, with 8 cells and 8 pix per cell
+    window = 64
+    # 8 was the step
+    step = 16
+    nxsteps = (ctrans_tosearch.shape[1] - window) // step + 1
+    nysteps = (ctrans_tosearch.shape[0] - window) // step + 1
+
+    features_list = []
+    for feat_mgr in feature_mgrs:
+        features_list.append(feat_mgr.search_sub_windows_feat(ctrans_tosearch, window, step))
+
+    features_list = np.hstack(features_list)
+
+    for index, features in enumerate(features_list):
+         # make a prediction
+        test_prediction = clf.predict(features.reshape(1, -1))
+        if test_prediction == 1:
+            ytop = (index // nxsteps) * step
+            xleft = (index % nxsteps) * step
+            xbox_left = np.int(xleft * scale)
+            ytop_draw = np.int(ytop * scale)
+            win_draw = np.int(window * scale)
+            car_boxes.append(
+                [(xbox_left, ytop_draw + y_start_stop[0]),
+                 (xbox_left + win_draw, ytop_draw + win_draw + y_start_stop[0])])
+
+    return car_boxes
+
+
+def find_cars_image(rgb_image, clf, featuer_mgrs, color_space='RGB'):
+
+    cars_boxes = []
+
+    # define multiple search field
+    x_start_stop = [None, None]
+    y_start_stops = [[400, 464], [416, 480], [400, 496], [432, 528], [400, 528], [432, 560], [400, 596], [464, 660]]
+
+    image_scales = [1.0, 1.0, 1.5, 1.5, 2.0, 2.0, 3.0, 3.0]
+
+    for i in range(len(y_start_stops)):
+        cars_boxes.extend(find_cars1(rgb_image, clf, featuer_mgrs, x_start_stop, y_start_stops[i], image_scales[i], color_space))
+
+    # define a heat map
+    heat = np.zeros_like(image[:, :, 0]).astype(np.float)
+    # Add heat to each box in each vehicle box
+    vehicle_heatmap = add_heat(heat, cars_boxes)
+    # apply threshold to help remove false positives
+    vehicle_heatmap = apply_threshold(vehicle_heatmap, 2)
+    # visualize the heatmap when displaying
+    vehicle_heatmap = np.clip(vehicle_heatmap, 0, 255)
+    labels = label(vehicle_heatmap)
+
+    draw_image = draw_labeled_bboxes(np.copy(rgb_image), labels)
+    return draw_image
+
+
+
+def construct_train_test_dataset(car_features_list, notcar_features_list):
+    """
+        construct the train and test dataset from the feature set
+        Noticed that we need to normalize(scale) each kind of features respectively and then combined them into together
+        """
+    # the of feature
+    features_num = len(car_features_list)
+    train_data = None
+    test_data = None
+    feature_scalers = []
+    rand_state = np.random.randint(0, 100)
+    for index in range(features_num):
+        # for each kind of feature vector, we split it and scaled it
+        car_features = car_features_list[index]
+        notcar_features = notcar_features_list[index]
+        features = car_features + notcar_features
         # Define the labels vector
-        y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
+        labels = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
+        # Split up data into randomized training and test feature
+        train_features, test_features, train_labels, test_labels = train_test_split(
+            features, labels, test_size=0.2, random_state=rand_state)
 
+        # Fit each type of features a scaler
+        feat_scaler = StandardScaler().fit(train_features)
+        feature_scalers.append(feat_scaler)
+        # Apply the scaler to train and test feature
+        scaled_train_features = feat_scaler.transform(train_features)
+        scaled_test_features = feat_scaler.transform(test_features)
+        # combine scaled features to final dataset
+        if train_data is None:
+            train_data = scaled_train_features
+            test_data = scaled_test_features
+        else:
+            train_data = np.hstack((train_data, scaled_train_features))
+            test_data = np.hstack((test_data, scaled_test_features))
+
+        """
         # filter bad value in X
         nans_index = np.where(np.isnan(X))
         row_index = list(set(nans_index[0]))
         X = np.delete(X, row_index, axis=0)
         y = np.delete(y, row_index, axis=0)
+        """
 
-        # store the dataset into the .p
-        save_dict = {'input_data': X, 'label': y}
-        with open(dataset_path, 'wb') as f:
-            pickle.dump(save_dict, f)
+    return train_data, test_data, train_labels, test_labels, feature_scalers
 
-    # Split up data into randomized training and test sets
-    rand_state = np.random.randint(0, 100)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=rand_state)
-
-    # Fit a per-column scaler
-    X_scaler = StandardScaler().fit(X_train)
-    # Apply the scaler to X
-    X_train = X_scaler.transform(X_train)
-    X_test = X_scaler.transform(X_test)
+if __name__ == "__main__":
 
 
-    # save the modes
-    clf_name = 'svc-1-linear'
-    folder_name = 'models/'
-    model_path = folder_name + clf_name + str(color_space) + '_spatial-' + str(spatial_feat) + str(spatial_size) + '_hist-' + str(
+    # Read in cars and notcars
+    cars = glob.glob('vehicles/**/*.png')
+    notcars = glob.glob('non-vehicles/**/*.png')
+    print("vehicle samples: %d, non-vehicle samples: %d" % (len(cars), len(notcars)))
+
+    # search for best combination
+    search = True
+    if search is True:
+        classifiers, color_spaces, spatial_features, hist_features, hog_features = set_features_classifiers_sets()
+        search_best_combination(cars, notcars, classifiers, color_spaces, spatial_features, hist_features, hog_features)
+
+    # image features parameters setting
+    color_space = 'RGB'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
+    orient = 7  # HOG orientations
+    pix_per_cell = 8  # HOG pixels per cell
+    cell_per_block = 2  # HOG cells per block
+    hog_channel = 0  # Can be 0, 1, 2, or "ALL"
+    spatial_size = (16, 16)  # Spatial binning dimensions
+    hist_bins = 16  # Number of histogram bins
+    spatial_feat = True  # Spatial features on or off
+    hist_feat = False  # Histogram features on or off
+    hog_feat = True  # HOG features on or off
+
+    # init needed image feature manager
+    feature_mgrs = []
+    if spatial_feat is True:
+        sp_mgr = SpatialFeature(spatial_size)
+        feature_mgrs.append(sp_mgr)
+    if hist_feat is True:
+        color_hist_mgr = ColorHistFeature(hist_bins)
+        feature_mgrs.append(color_hist_mgr)
+    if hog_feat is True:
+        hog_mgr = HogFeature(orient, pix_per_cell, cell_per_block, hog_channel)
+        feature_mgrs.append(hog_mgr)
+
+    """
+           Extract the images features from image dataset and construct the feature dataset based on the feature 
+           parameters setting. 
+           Once we finished extracting the feature dataset, we save it to the 'features_set' folder 
+           so that we don't need do it next time
+           """
+    # define feature_dataset path
+    folder_name = 'features_set/'
+    suffix = str(color_space) + '_spatial-' + str(spatial_feat) + str(spatial_size) + '_hist-' + str(
         hist_feat) + str(hist_bins) + '_hog-' + str(hog_feat) + str(orient) + str(pix_per_cell) + \
                 str(cell_per_block) + str(hog_channel) + '.p'
+    save_path = folder_name + suffix
+
+    if os.path.isfile(save_path):
+        # if feature dataset exist, load it from pickle
+        save_dict = pickle.load(open(save_path, "rb"))
+        car_features_list = save_dict['car_features_list']
+        notcar_features_list = save_dict['notcar_features_list']
+        feature_length = save_dict['feature_length']
+        extract_time = save_dict['time']
+    else:
+        # if the dataset doesn't exist, create the feature the dataset and store it to a pickle
+        t1 = time.time()
+        car_features_list = extract_features(cars, feature_mgrs, color_space)
+        notcar_features_list = extract_features(notcars, feature_mgrs, color_space)
+        t2 = time.time()
+        extract_time = round(t2 - t1, 2)
+
+        feature_length = 0
+        for i in range(len(feature_mgrs)):
+            feature_length += len(car_features_list[i][0])
+
+        # store the dataset into the .p
+        save_dict = {'car_features_list': car_features_list, 'notcar_features_list': notcar_features_list,
+                     'feature_length': feature_length, 'time': extract_time}
+        with open(save_path, 'wb') as f:
+            pickle.dump(save_dict, f)
+
+    print('Using:', orient, 'orientations', pix_per_cell,
+          'pixels per cell and', cell_per_block, 'cells per block')
+    print("feature length: %d, feature extract time: %5.2f" % (feature_length, extract_time))
+
+    train_data, test_data, train_labels, test_labels, feature_scalers = construct_train_test_dataset(car_features_list,
+                                                                                                     notcar_features_list)
+    set_feat_mgrs_scalers(feature_mgrs, feature_scalers)
+    """
+    Define a model and train it.
+    Once we finished training the model, we save it to the 'models' folder 
+        so that we don't need do it next time
+    """
+    # save the modes
+    clf_name = 'svm-1-linear'
+    folder_name = 'models/'
+    model_path = folder_name + clf_name + suffix
     if os.path.isfile(model_path):
         save_dict = pickle.load(open(model_path, "rb"))
         clf = save_dict['classifier']
@@ -597,48 +711,35 @@ if __name__ == "__main__":
         accuracy = save_dict['accuracy']
         # if the dataset doesn't exist, create the dataset and store it to a pickle
     else:
-        print('Using:', orient, 'orientations', pix_per_cell,
-              'pixels per cell and', cell_per_block, 'cells per block')
-        print('Feature vector length:', len(X_train[0]))
-        # Use a linear SVC
-        # clf = GaussianNB()
-        clf = SVC(C=1.0, kernel='linear')
+        # Use a classifier
+        clf = LinearSVC()
         # Check the training time for the SVC
         t = time.time()
-        clf.fit(X_train, y_train)
+        clf.fit(train_data, train_labels)
         t2 = time.time()
         train_time = round(t2 - t, 2)
-        accuracy = round(clf.score(X_test, y_test), 4)
-        print(train_time, 'Seconds to train Classifier...')
-        # Check the score of the SVC
-        print('Test Accuracy of Classifier = ', accuracy)
-        # Check the prediction time for a single sample
-        t = time.time()
+        accuracy = round(clf.score(test_data, test_labels), 4)
+
+        # save the model info
         save_dict = {'classifier': clf, 'accuracy': accuracy, 'train_time': train_time}
         with open(model_path, 'wb') as f:
             pickle.dump(save_dict, f)
 
+    print(train_time, 'Seconds to train Classifier...')
+    # Check the score of the Classifier
+    print('Test Accuracy of Classifier = ', accuracy)
+
+    n_predict = 10
+    print('My classfier predicts: ', clf.predict(test_data[0:n_predict]))
+    print('For these', n_predict, 'labels: ', test_labels[0:n_predict])
+
+
     image = cv2.imread('test_images/test1.jpg')
-    draw_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # Uncomment the following line if you extracted training
-    # data from .png images (scaled 0 to 1 by mpimg) and the
-    # image you are searching is a .jpg (scaled 0 to 255)
-    # image = image.astype(np.float32)/255
+    draw_image = find_cars_image(rgb_image, clf, feature_mgrs, color_space)
 
-    windows = slide_window(image, x_start_stop=[None, None], y_start_stop=y_start_stop,
-                           xy_window=(96, 96), xy_overlap=(0.5, 0.5))
-
-    hot_windows = search_windows(image, windows, clf, X_scaler, color_space=color_space,
-                                 spatial_size=spatial_size, hist_bins=hist_bins,
-                                 orient=orient, pix_per_cell=pix_per_cell,
-                                 cell_per_block=cell_per_block,
-                                 hog_channel=hog_channel, spatial_feat=spatial_feat,
-                                 hist_feat=hist_feat, hog_feat=hog_feat)
-
-    window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
-
-    plt.imshow(window_img)
+    plt.imshow(draw_image)
     plt.show()
     a = 1
 
