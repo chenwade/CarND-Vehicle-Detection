@@ -95,6 +95,5 @@ def get_rectangle_area_of_video(input_video, out_video_name, left_top, right_bot
 
 if __name__ == "__main__":
 
-    get_rectangle_area_of_video('right.mp4', 'right_out.mp4', (480, 110), (1440, 750))
-    #obtain_video_subclip('harder_challenge_video.mp4', 'short_harder_challenge_video.mp4', 0, 10)
+    obtain_video_subclip('project_video.mp4', 'short_project_video.mp4', 31, 36)
     #divide_video_into_images('harder_challenge_video.mp4', 'debug_folder/')

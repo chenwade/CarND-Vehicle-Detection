@@ -7,7 +7,8 @@ import glob
 import matplotlib.pyplot as plt
 from moviepy.editor import VideoFileClip
 
-from object_detection import *
+from vehicle_detection import *
+from feature import *
 
 
 def train_model():
@@ -27,23 +28,23 @@ def train_model():
     orient = 9  # HOG orientations
     pix_per_cell = 16  # HOG pixels per cell
     cell_per_block = 2  # HOG cells per block
-    hog_channel = 'ALL'  # Can be 0, 1, 2, or "ALL"
+    hog_channel = 1  # Can be 0, 1, 2, or "ALL"
     spatial_size = (16, 16)  # Spatial binning dimensions
     hist_bins = 16  # Number of histogram bins
-    spatial_feat = False  # Spatial features on or off
+    spatial_feat = True  # Spatial features on or off
     hist_feat = True  # Histogram features on or off
-    hog_feat = False  # HOG features on or off
+    hog_feat = True  # HOG features on or off
 
     # init needed image feature manager
     feature_mgrs = []
     if spatial_feat is True:
-        sp_mgr = SpatialFeature(spatial_size)
+        sp_mgr = SpatialFeature(color_space, spatial_size)
         feature_mgrs.append(sp_mgr)
     if hist_feat is True:
-        color_hist_mgr = ColorHistFeature(hist_bins)
+        color_hist_mgr = ColorHistFeature(color_space, hist_bins)
         feature_mgrs.append(color_hist_mgr)
     if hog_feat is True:
-        hog_mgr = HogFeature(orient, pix_per_cell, cell_per_block, hog_channel)
+        hog_mgr = HogFeature(color_space, orient, pix_per_cell, cell_per_block, hog_channel)
         feature_mgrs.append(hog_mgr)
 
     """
@@ -100,7 +101,7 @@ def train_model():
         so that we don't need do it next time
     """
     # save the modes
-    clf_name = 'svm-10-rbf'
+    clf_name = 'svm-1-rbf'
     folder_name = 'models/'
     model_path = folder_name + clf_name + suffix
     if os.path.isfile(model_path):
@@ -111,7 +112,7 @@ def train_model():
         # if the dataset doesn't exist, create the dataset and store it to a pickle
     else:
         # Use a classifier
-        clf = SVC(C=10.0, kernel='rbf')
+        clf = SVC(C=10, kernel='rbf')
         # Check the training time for the SVC
         t = time.time()
         clf.fit(train_data, train_labels)
@@ -136,13 +137,10 @@ def train_model():
 
 
 def process_image(image):
-    global feature_mgrs
-    global clf
-    global color_space
-    draw_image = find_cars(image, clf, feature_mgrs, color_space='RGB')
+    global car
+    global file_type
+    draw_image = car.detect(image, file_type)
     return draw_image
-
-
 
 
 
@@ -151,7 +149,7 @@ if __name__ == "__main__":
     # set defalut parameter
     parser = argparse.ArgumentParser(prog='object_detection.py', usage='python %(prog)s -i input_file -o [output_file]',
                                      description='detect lane from images or pictures')
-    parser.add_argument('-i', '--input_file', type=str, default='test1.jpg',
+    parser.add_argument('-i', '--input_file', type=str, default='project_video.mp4',
                         help='input image or video file to process')
     parser.add_argument('-o', '--output_file', type=str, default='project_video_out.mp4', help='processed image or video file')
     args = parser.parse_args()
@@ -184,9 +182,10 @@ if __name__ == "__main__":
         sys.exit(3)
 
 
-
     # choose features and train classifier
     feature_mgrs, clf = train_model()
+    # initial the car object
+    car = Car(feature_mgrs, clf, debug_mode=True)
 
     # process image
     if file_type == 'image':
