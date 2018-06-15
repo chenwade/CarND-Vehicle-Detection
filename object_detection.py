@@ -1,32 +1,24 @@
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import cv2
-import glob
-import os
 import pickle
+import os
 import time
+
+
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
-from sklearn.svm import LinearSVC
 from sklearn.tree import DecisionTreeClassifier
+
 from sklearn.preprocessing import StandardScaler
-from skimage.feature import hog
 from scipy.ndimage.measurements import label
 
 # NOTE: the next import is only valid for scikit-learn version <= 0.17
 # for scikit-learn >= 0.18 use:
 from sklearn.model_selection import train_test_split
 
-
-import matplotlib.image as mpimg
-import numpy as np
-import cv2
-from skimage.feature import hog
-
-
 from feature import *
+
 
 # Define a function to draw bounding boxes
 def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
@@ -156,83 +148,24 @@ def slide_window(img, x_start_stop=[None, None], y_start_stop=[None, None],
     return window_list
 
 
-# Define a function to extract features from a single image window
-# This function is very similar to extract_features()
-# just for a single image rather than list of images
-def single_img_features(img, color_space='RGB', spatial_size=(32, 32),
-                        hist_bins=32, orient=9,
-                        pix_per_cell=8, cell_per_block=2, hog_channel=0,
-                        spatial_feat=True, hist_feat=True, hog_feat=True):
-    # 1) Define an empty list to receive features
-    img_features = []
-    # 2) Apply color conversion if other than 'RGB'
-    if color_space != 'RGB':
-        if color_space == 'HSV':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-        elif color_space == 'LUV':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2LUV)
-        elif color_space == 'HLS':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
-        elif color_space == 'YUV':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
-        elif color_space == 'YCrCb':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
-    else:
-        feature_image = np.copy(img)
-    # 3) Compute spatial features if flag is set
-    if spatial_feat == True:
-        spatial_features = bin_spatial(feature_image, size=spatial_size)
-        # 4) Append features to list
-        img_features.append(spatial_features)
-    # 5) Compute histogram features if flag is set
-    if hist_feat == True:
-        hist_features = color_hist(feature_image, nbins=hist_bins)
-        # 6) Append features to list
-        img_features.append(hist_features)
-    # 7) Compute HOG features if flag is set
-    if hog_feat == True:
-        if hog_channel == 'ALL':
-            hog_features = []
-            for channel in range(feature_image.shape[2]):
-                hog_features.extend(get_hog_features(feature_image[:, :, channel],
-                                                     orient, pix_per_cell, cell_per_block,
-                                                     vis=False, feature_vec=True))
-        else:
-            hog_features = get_hog_features(feature_image[:, :, hog_channel], orient,
-                                            pix_per_cell, cell_per_block, vis=False, feature_vec=True)
-        # 8) Append features to list
-        img_features.append(hog_features)
-
-    # 9) Return concatenated array of features
-    return np.concatenate(img_features)
-
-
 # Define a function you will pass an image
 # and the list of windows to be searched (output of slide_windows())
-def search_windows(img, windows, clf, scaler, color_space='RGB',
-                   spatial_size=(32, 32), hist_bins=32,
-                   hist_range=(0, 256), orient=9,
-                   pix_per_cell=8, cell_per_block=2,
-                   hog_channel=0, spatial_feat=True,
-                   hist_feat=True, hog_feat=True):
+def search_windows(img, windows, clf, feature_mgrs):
     # 1) Create an empty list to receive positive detection windows
     on_windows = []
     # 2) Iterate over all windows in the list
     for window in windows:
         # 3) Extract the test window from original image
         test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))
-        # 4) Extract features for that window using single_img_features()
-        features = single_img_features(test_img, color_space=color_space,
-                                       spatial_size=spatial_size, hist_bins=hist_bins,
-                                       orient=orient, pix_per_cell=pix_per_cell,
-                                       cell_per_block=cell_per_block,
-                                       hog_channel=hog_channel, spatial_feat=spatial_feat,
-                                       hist_feat=hist_feat, hog_feat=hog_feat)
-        # 5) Scale extracted features to be fed to classifier
-        test_features = scaler.transform(np.array(features).reshape(1, -1))
-        # 6) Predict using your classifier
-        prediction = clf.predict(test_features)
-        # 7) If positive (prediction == 1) then save the window
+        # 4) Extract scaled features for that window using extract_scaled_feature()
+        features_list = []
+        for feat_mgr in feature_mgrs:
+            features_list.append(feat_mgr.extract_scaled_feature(test_img))
+
+        features_list = np.hstack(features_list).reshape(1, -1)
+        # 5) Predict using your classifier
+        prediction = clf.predict(features_list)
+        # 6) If positive (prediction == 1) then save the window
         if prediction == 1:
             on_windows.append(window)
     # 8) Return windows for positive detections
@@ -378,8 +311,13 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
                                                     with open(save_path, 'wb') as f:
                                                         pickle.dump(save_dict, f)
 
-                                                print('Using:', orient, 'orientations', pix_per_cell,
-                                                      'pixels per cell and', cell_per_block, 'cells per block')
+                                                print('Using:', color_space, 'spatial_feat', spatial_feat, 'hist_feat',
+                                                      hist_feat, 'hog_feat', hog_feat)
+
+                                                print('Using:', spatial_size, 'spatial_size', hist_bins, 'hist bin',
+                                                      orient, 'orientations', pix_per_cell, 'pixels per cell and',
+                                                      cell_per_block, 'cells per block', 'hog_channel:', hog_channel )
+
                                                 print("feature length: %d, feature extract time: %5.2f" % (
                                                 feature_length, extract_time))
 
@@ -434,9 +372,9 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
                                                             doc.close()
                                                             continue
 
-                                                    print(train_time, 'Seconds to train Classifier...')
                                                     # Check the score of the Classifier
-                                                    print('Test Accuracy of Classifier = ', accuracy)
+                                                    print(train_time, 'Seconds to train ', clf_name, 'Test Accuracy = ',
+                                                          accuracy)
 
                                                     new_series = pd.Series(
                                                         [color_space, spatial_feat, spatial_size, hist_feat,
@@ -463,26 +401,20 @@ def search_best_combination(cars, notcars, classifiers, color_spaces, spatial_fe
                                                 df.to_csv('feature_selection.csv')
 
 
-
-def set_feat_mgrs_scalers(feature_mgrs, feature_scalers):
-    for i in range(len(feature_mgrs)):
-        feature_mgrs[i].features_scaler = feature_scalers[i]
-
-
-def find_cars1(img, clf, feature_mgrs, x_start_stop=[None, None], y_start_stop=[None, None], scale=1.0, cspace='RGB'):
+def find_cars_box(img, clf, feature_mgrs, x_start_stop=[None, None], y_start_stop=[None, None], scale=1.0, cspace='RGB'):
     """
         Define a single function that can extract features using hog sub-sampling and make predictions
         The code below maybe a little confusing, but it can help to only extract hog features once.
-        As result, this version of code cost less time finding cars
+        As result, this version of code cost less time finding cars compared with find_car_box1
     """
 
     assert feature_mgrs
     car_boxes = []
 
     if x_start_stop == [None, None]:
-        x_start_stop = [0, image.shape[1]]
+        x_start_stop = [0, img.shape[1]]
     if y_start_stop == [None, None]:
-        y_start_stop = [0, image.shape[0]]
+        y_start_stop = [0, img.shape[0]]
 
     img_tosearch = img[y_start_stop[0]:y_start_stop[1], x_start_stop[0]:x_start_stop[1], :]
 
@@ -538,7 +470,51 @@ def find_cars1(img, clf, feature_mgrs, x_start_stop=[None, None], y_start_stop=[
     return car_boxes
 
 
-def find_cars_image(rgb_image, clf, featuer_mgrs, color_space='RGB'):
+def find_cars_box1(img, clf, feature_mgrs, x_start_stop=[None, None], y_start_stop=[None, None], scale=1.0, cspace='RGB'):
+    """
+        Define a single function that can extract features using hog sub-sampling and make predictions
+        The code below maybe a little confusing, but it can help to only extract hog features once.
+        As result, this version of code cost less time finding cars box compared with find_cars_box
+    """
+    assert feature_mgrs
+
+    if x_start_stop == [None, None]:
+        x_start_stop = [0, img.shape[1]]
+    if y_start_stop == [None, None]:
+        y_start_stop = [0, img.shape[0]]
+
+    if cspace != 'RGB':
+        if cspace == 'HSV':
+            ctrans_img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        elif cspace == 'LUV':
+            ctrans_img = cv2.cvtColor(img, cv2.COLOR_RGB2LUV)
+        elif cspace == 'HLS':
+            ctrans_img = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
+        elif cspace == 'YUV':
+            ctrans_img = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
+        elif cspace == 'YCrCb':
+            ctrans_img = cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
+        else:
+            raise Exception("color space is %s" % cspace)
+    else:
+        ctrans_img = np.copy(img)
+
+    # Define window and steps as below
+    # 64 was the orginal sampling rate, with 8 cells and 8 pix per cell
+    window = np.int(64 * scale)
+    # 8 was the step
+    step = np.int(16 * scale)
+    overlap = (window - step) / window
+
+    # get the slide windows
+    windows = slide_window(img, x_start_stop, y_start_stop, xy_window=(window, window), xy_overlap=(overlap, overlap))
+    # select the car box from slide windows
+    car_boxes = search_windows(ctrans_img, windows, clf, feature_mgrs)
+
+    return car_boxes
+
+
+def find_cars(rgb_image, clf, feature_mgrs, color_space='RGB'):
 
     cars_boxes = []
 
@@ -549,21 +525,22 @@ def find_cars_image(rgb_image, clf, featuer_mgrs, color_space='RGB'):
     image_scales = [1.0, 1.0, 1.5, 1.5, 2.0, 2.0, 3.0, 3.0]
 
     for i in range(len(y_start_stops)):
-        cars_boxes.extend(find_cars1(rgb_image, clf, featuer_mgrs, x_start_stop, y_start_stops[i], image_scales[i], color_space))
+        cars_boxes.extend(
+            find_cars_box1(rgb_image, clf, feature_mgrs, x_start_stop, y_start_stops[i], image_scales[i], color_space))
 
     # define a heat map
-    heat = np.zeros_like(image[:, :, 0]).astype(np.float)
+    heat = np.zeros_like(rgb_image[:, :, 0]).astype(np.float)
     # Add heat to each box in each vehicle box
     vehicle_heatmap = add_heat(heat, cars_boxes)
+
     # apply threshold to help remove false positives
-    vehicle_heatmap = apply_threshold(vehicle_heatmap, 2)
+    vehicle_heatmap = apply_threshold(vehicle_heatmap, 3)
     # visualize the heatmap when displaying
     vehicle_heatmap = np.clip(vehicle_heatmap, 0, 255)
     labels = label(vehicle_heatmap)
 
     draw_image = draw_labeled_bboxes(np.copy(rgb_image), labels)
     return draw_image
-
 
 
 def construct_train_test_dataset(car_features_list, notcar_features_list):
@@ -611,137 +588,6 @@ def construct_train_test_dataset(car_features_list, notcar_features_list):
         """
 
     return train_data, test_data, train_labels, test_labels, feature_scalers
-
-if __name__ == "__main__":
-
-
-    # Read in cars and notcars
-    cars = glob.glob('vehicles/**/*.png')
-    notcars = glob.glob('non-vehicles/**/*.png')
-    print("vehicle samples: %d, non-vehicle samples: %d" % (len(cars), len(notcars)))
-
-    # search for best combination
-    search = True
-    if search is True:
-        classifiers, color_spaces, spatial_features, hist_features, hog_features = set_features_classifiers_sets()
-        search_best_combination(cars, notcars, classifiers, color_spaces, spatial_features, hist_features, hog_features)
-
-    # image features parameters setting
-    color_space = 'RGB'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
-    orient = 7  # HOG orientations
-    pix_per_cell = 8  # HOG pixels per cell
-    cell_per_block = 2  # HOG cells per block
-    hog_channel = 0  # Can be 0, 1, 2, or "ALL"
-    spatial_size = (16, 16)  # Spatial binning dimensions
-    hist_bins = 16  # Number of histogram bins
-    spatial_feat = True  # Spatial features on or off
-    hist_feat = False  # Histogram features on or off
-    hog_feat = True  # HOG features on or off
-
-    # init needed image feature manager
-    feature_mgrs = []
-    if spatial_feat is True:
-        sp_mgr = SpatialFeature(spatial_size)
-        feature_mgrs.append(sp_mgr)
-    if hist_feat is True:
-        color_hist_mgr = ColorHistFeature(hist_bins)
-        feature_mgrs.append(color_hist_mgr)
-    if hog_feat is True:
-        hog_mgr = HogFeature(orient, pix_per_cell, cell_per_block, hog_channel)
-        feature_mgrs.append(hog_mgr)
-
-    """
-           Extract the images features from image dataset and construct the feature dataset based on the feature 
-           parameters setting. 
-           Once we finished extracting the feature dataset, we save it to the 'features_set' folder 
-           so that we don't need do it next time
-           """
-    # define feature_dataset path
-    folder_name = 'features_set/'
-    suffix = str(color_space) + '_spatial-' + str(spatial_feat) + str(spatial_size) + '_hist-' + str(
-        hist_feat) + str(hist_bins) + '_hog-' + str(hog_feat) + str(orient) + str(pix_per_cell) + \
-                str(cell_per_block) + str(hog_channel) + '.p'
-    save_path = folder_name + suffix
-
-    if os.path.isfile(save_path):
-        # if feature dataset exist, load it from pickle
-        save_dict = pickle.load(open(save_path, "rb"))
-        car_features_list = save_dict['car_features_list']
-        notcar_features_list = save_dict['notcar_features_list']
-        feature_length = save_dict['feature_length']
-        extract_time = save_dict['time']
-    else:
-        # if the dataset doesn't exist, create the feature the dataset and store it to a pickle
-        t1 = time.time()
-        car_features_list = extract_features(cars, feature_mgrs, color_space)
-        notcar_features_list = extract_features(notcars, feature_mgrs, color_space)
-        t2 = time.time()
-        extract_time = round(t2 - t1, 2)
-
-        feature_length = 0
-        for i in range(len(feature_mgrs)):
-            feature_length += len(car_features_list[i][0])
-
-        # store the dataset into the .p
-        save_dict = {'car_features_list': car_features_list, 'notcar_features_list': notcar_features_list,
-                     'feature_length': feature_length, 'time': extract_time}
-        with open(save_path, 'wb') as f:
-            pickle.dump(save_dict, f)
-
-    print('Using:', orient, 'orientations', pix_per_cell,
-          'pixels per cell and', cell_per_block, 'cells per block')
-    print("feature length: %d, feature extract time: %5.2f" % (feature_length, extract_time))
-
-    train_data, test_data, train_labels, test_labels, feature_scalers = construct_train_test_dataset(car_features_list,
-                                                                                                     notcar_features_list)
-    set_feat_mgrs_scalers(feature_mgrs, feature_scalers)
-    """
-    Define a model and train it.
-    Once we finished training the model, we save it to the 'models' folder 
-        so that we don't need do it next time
-    """
-    # save the modes
-    clf_name = 'svm-1-linear'
-    folder_name = 'models/'
-    model_path = folder_name + clf_name + suffix
-    if os.path.isfile(model_path):
-        save_dict = pickle.load(open(model_path, "rb"))
-        clf = save_dict['classifier']
-        train_time = save_dict['train_time']
-        accuracy = save_dict['accuracy']
-        # if the dataset doesn't exist, create the dataset and store it to a pickle
-    else:
-        # Use a classifier
-        clf = LinearSVC()
-        # Check the training time for the SVC
-        t = time.time()
-        clf.fit(train_data, train_labels)
-        t2 = time.time()
-        train_time = round(t2 - t, 2)
-        accuracy = round(clf.score(test_data, test_labels), 4)
-
-        # save the model info
-        save_dict = {'classifier': clf, 'accuracy': accuracy, 'train_time': train_time}
-        with open(model_path, 'wb') as f:
-            pickle.dump(save_dict, f)
-
-    print(train_time, 'Seconds to train Classifier...')
-    # Check the score of the Classifier
-    print('Test Accuracy of Classifier = ', accuracy)
-
-    n_predict = 10
-    print('My classfier predicts: ', clf.predict(test_data[0:n_predict]))
-    print('For these', n_predict, 'labels: ', test_labels[0:n_predict])
-
-
-    image = cv2.imread('test_images/test1.jpg')
-    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    draw_image = find_cars_image(rgb_image, clf, feature_mgrs, color_space)
-
-    plt.imshow(draw_image)
-    plt.show()
-    a = 1
 
 
 

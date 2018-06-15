@@ -1,16 +1,6 @@
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-
-from sklearn.preprocessing import StandardScaler
 from skimage.feature import hog
-from scipy.ndimage.measurements import label
-
-# NOTE: the next import is only valid for scikit-learn version <= 0.17
-# for scikit-learn >= 0.18 use:
-from sklearn.model_selection import train_test_split
-
 
 
 class ImageFeature(object):
@@ -22,6 +12,10 @@ class ImageFeature(object):
     def extract_feature(self, image):
         pass
 
+    def set_scalers(self, feature_scaler):
+        # set the feature scaler
+        self.features_scaler = feature_scaler
+
 
 class SpatialFeature(ImageFeature):
     """
@@ -30,6 +24,11 @@ class SpatialFeature(ImageFeature):
     def __init__(self, size=(32, 32)):
         ImageFeature.__init__(self)
         self.size = size
+
+    def extract_scaled_feature(self, image, vis=False, feature_vec=True):
+        feature = self.extract_feature(image).reshape(1, -1)
+        scaled_feature = self.features_scaler.transform(feature)
+        return scaled_feature
 
     # Define a function to compute binned color features
     def extract_feature(self, image):
@@ -63,14 +62,20 @@ class ColorHistFeature(ImageFeature):
         self.nbins = nbins
         self.bins_range = bins_range
 
+    def extract_scaled_feature(self, image, vis=False, feature_vec=True):
+        feature = self.extract_feature(image).reshape(1, -1)
+        scaled_feature = self.features_scaler.transform(feature)
+        return scaled_feature
+
     # Define a function to compute binned color features
     def extract_feature(self, image):
         features = []
         if len(image.shape) > 2:
-            channel_count = image.shape[2]
+            channel_num = image.shape[2]
             # Compute the histogram of the color channels separately
-            for channel in channel_count:
-                features.append(np.histogram(image[:, :, channel], bins=self.nbins, range=self.bins_range))
+            for channel in range(channel_num):
+                hist_feat, bin_edges = np.histogram(image[:, :, channel], bins=self.nbins, range=self.bins_range)
+                features.append(hist_feat)
             # Concatenate the histograms into a single feature vector
             self.features = np.concatenate(features)
         # single channel image
@@ -108,13 +113,19 @@ class HogFeature(ImageFeature):
         self.cell_per_block = cell_per_block
         self.hog_channel = hog_channel
 
+    def extract_scaled_feature(self, image, vis=False, feature_vec=True):
+        feature = self.extract_feature(image, vis, feature_vec).reshape(1, -1)
+        scaled_feature = self.features_scaler.transform(feature)
+        return scaled_feature
+
     def extract_feature(self, image, vis=False, feature_vec=True):
         # Call get_hog_features() with vis=False, feature_vec=True
         if self.hog_channel == 'ALL':
             assert len(image.shape) > 2, "input image is single channel, we need more than 3 channel image " \
                                          "to compute the 'ALL' hog feature"
             hog_features = []
-            for channel in range(image.shape[2]):
+            channel_num = image.shape[2]
+            for channel in range(channel_num):
                 hog_features.append(self.__get_hog_features(image[:, :, channel], vis=False, feature_vec=True))
             self.features = np.ravel(hog_features)
         else:
@@ -181,8 +192,6 @@ class HogFeature(ImageFeature):
 
         scaled_sub_feature_list = self.features_scaler.transform(sub_features_list)
         return scaled_sub_feature_list
-
-
 
 
 
