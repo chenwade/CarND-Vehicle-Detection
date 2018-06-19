@@ -149,9 +149,9 @@ if __name__ == "__main__":
     # set defalut parameter
     parser = argparse.ArgumentParser(prog='object_detection.py', usage='python %(prog)s -i input_file -o [output_file]',
                                      description='detect lane from images or pictures')
-    parser.add_argument('-i', '--input_file', type=str, default='project_video.mp4',
+    parser.add_argument('-i', '--input_file', type=str, default='test_images/test1.jpg',
                         help='input image or video file to process')
-    parser.add_argument('-o', '--output_file', type=str, default='project_video_out.mp4', help='processed image or video file')
+    parser.add_argument('-o', '--output_file', type=str, default='project_video_debug_out.mp4', help='processed image or video file')
     args = parser.parse_args()
 
     """
@@ -204,6 +204,7 @@ if __name__ == "__main__":
         plt.xlim(0, draw_image.shape[1])
         plt.ylim(draw_image.shape[0], 0)
         plt.show()
+        a = 1
 
     # process video
     if file_type == 'video':

@@ -117,9 +117,9 @@ class Car(Vehicle):
 
         # apply threshold to help remove false positives
         if file_type == 'image':
-            thresholded_heatmap = self.heatmap_threshold(heatmap, 3)
+            thresholded_heatmap = self.heatmap_threshold(heatmap, 4)
         else:
-            thresholded_heatmap = self.heatmap_threshold(heatmap, 12)
+            thresholded_heatmap = self.heatmap_threshold(heatmap, 13)
         # visualize the heatmap when displaying
         vehicle_heatmap = np.clip(thresholded_heatmap, 0, 255)
         labels = label(vehicle_heatmap)
